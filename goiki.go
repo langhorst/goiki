@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -11,12 +12,22 @@ import (
 )
 
 var (
-	addr = flag.Bool("addr", false, "find open address and print to final-port.txt")
+	config Config
 )
+
+type Config struct {
+	Port int
+	Host string
+}
 
 type Page struct {
 	Title string
 	Body  []byte
+}
+
+func init() {
+	flag.IntVar(&config.Port, "port", 4567, "Bind port (default: 4567)")
+	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on (default: 0.0.0.0)")
 }
 
 func (p *Page) save() error {
@@ -89,20 +100,12 @@ func main() {
 	http.HandleFunc("/edit/", makeHandler(editHandler))
 	http.HandleFunc("/save/", makeHandler(saveHandler))
 
-	if *addr {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = ioutil.WriteFile("final-port.txt", []byte(l.Addr().String()), 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		s := &http.Server{}
-		s.Serve(l)
-		return
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	http.ListenAndServe(":8080", nil)
+	s := &http.Server{}
+	s.Serve(l)
+	return
 }
