@@ -1,14 +1,18 @@
 package main
 
 import (
+	// stdlib
 	"flag"
 	"fmt"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"regexp"
+	"text/template"
+
+	// external
+	"github.com/russross/blackfriday"
 )
 
 var (
@@ -22,7 +26,7 @@ type Config struct {
 
 type Page struct {
 	Title string
-	Body  []byte
+	Body  string
 }
 
 func init() {
@@ -32,7 +36,7 @@ func init() {
 
 func (p *Page) save() error {
 	filename := p.Title + ".txt"
-	return ioutil.WriteFile(filename, p.Body, 0600)
+	return ioutil.WriteFile(filename, []byte(p.Body), 0600)
 }
 
 func loadPage(title string) (*Page, error) {
@@ -41,7 +45,8 @@ func loadPage(title string) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Page{Title: title, Body: body}, nil
+	body = blackfriday.MarkdownCommon(body)
+	return &Page{Title: title, Body: string(body)}, nil
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -63,7 +68,7 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
-	p := &Page{Title: title, Body: []byte(body)}
+	p := &Page{Title: title, Body: body}
 	err := p.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
