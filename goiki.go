@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"text/template"
 
@@ -20,8 +21,9 @@ var (
 )
 
 type Config struct {
-	Port int
-	Host string
+	Port    int
+	Host    string
+	DataDir string
 }
 
 type Page struct {
@@ -30,17 +32,22 @@ type Page struct {
 }
 
 func init() {
-	flag.IntVar(&config.Port, "port", 4567, "Bind port (default: 4567)")
-	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on (default: 0.0.0.0)")
+	flag.IntVar(&config.Port, "port", 4567, "Bind port")
+	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
+	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
 }
 
 func (p *Page) save() error {
-	filename := p.Title + ".txt"
+	filename := buildFilename(p.Title)
 	return ioutil.WriteFile(filename, []byte(p.Body), 0600)
 }
 
+func buildFilename(title string) string {
+	return filepath.Join(config.DataDir, (title + ".txt"))
+}
+
 func loadPage(title string) (*Page, error) {
-	filename := title + ".txt"
+	filename := buildFilename(title)
 	body, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
