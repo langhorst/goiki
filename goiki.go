@@ -16,8 +16,13 @@ import (
 	"github.com/russross/blackfriday"
 )
 
+const (
+	GOIKIVERSION = "0.0.1"
+)
+
 var (
-	config Config
+	displayVersion bool
+	config         Config
 )
 
 type Config struct {
@@ -35,6 +40,7 @@ func init() {
 	flag.IntVar(&config.Port, "port", 4567, "Bind port")
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
+	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 }
 
 func (p *Page) save() error {
@@ -118,6 +124,13 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 
 func main() {
 	flag.Parse()
+
+	// Display version and exit
+	if displayVersion {
+		fmt.Println("Goiki", GOIKIVERSION)
+		return
+	}
+
 	http.Handle("/static/", http.FileServer(http.Dir("./")))
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
