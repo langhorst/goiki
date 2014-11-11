@@ -48,13 +48,23 @@ func loadPage(title string) (*Page, error) {
 	return &Page{Title: title, Body: string(body)}, nil
 }
 
+func processLinks(content []byte) []byte {
+	re := regexp.MustCompile(`\[(.*)\]\(\)`)
+	return re.ReplaceAll(content, []byte("[$1]($1)"))
+}
+
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	p, err := loadPage(title)
 	if err != nil {
 		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
 		return
 	}
-	p.Body = string(blackfriday.MarkdownCommon([]byte(p.Body)))
+
+	content := []byte(p.Body)
+	content = processLinks(content)
+	content = blackfriday.MarkdownCommon(content)
+	p.Body = string(content)
+
 	renderTemplate(w, "view", p)
 }
 
