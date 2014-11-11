@@ -62,7 +62,7 @@ func loadPage(title string) (*Page, error) {
 }
 
 func processLinks(content []byte) []byte {
-	re := regexp.MustCompile(`\[(\w*|\s*)\]\(\)`)
+	re := regexp.MustCompile(`\[([^\]]+)]\(\)`)
 	return re.ReplaceAllFunc(content, func(match []byte) []byte {
 		return re.ReplaceAll(match, []byte("[$1]($1)"))
 	})
