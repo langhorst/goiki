@@ -23,6 +23,8 @@ const (
 var (
 	displayVersion bool
 	config         Config
+	templates      *template.Template
+	validPath      *regexp.Regexp
 )
 
 type Config struct {
@@ -41,6 +43,9 @@ func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
+
+	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
+	validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
 }
 
 func (p *Page) save() error {
@@ -102,8 +107,6 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
-var templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
-
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
 	if err != nil {
@@ -111,14 +114,13 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	}
 }
 
-var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
-
 func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if path == "/" {
 			path = "/view/FrontPage"
 		}
+		fmt.Println(path)
 		m := validPath.FindStringSubmatch(path)
 		if m == nil {
 			http.NotFound(w, r)
