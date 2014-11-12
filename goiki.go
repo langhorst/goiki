@@ -2,6 +2,7 @@ package main
 
 import (
 	// stdlib
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 	"text/template"
 
 	// external
+	"github.com/VictorLowther/go-git/git"
 	"github.com/russross/blackfriday"
 )
 
@@ -26,6 +28,7 @@ var (
 	templates      *template.Template
 	validPath      *regexp.Regexp
 	validLink      *regexp.Regexp
+	repo           *git.Repo
 )
 
 type Config struct {
@@ -48,24 +51,79 @@ func init() {
 	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
+
 }
 
 func (p *Page) save() error {
 	filename := buildFilename(p.Title)
-	return ioutil.WriteFile(filename, []byte(p.Body), 0600)
+	err := ioutil.WriteFile(filepath.Join(config.DataDir, filename), []byte(p.Body), 0600)
+	if err != nil {
+		return err
+	}
+	stdOut, stdErr := gitAdd(filename)
+	if stdErr.Len() > 0 {
+		return fmt.Errorf("Unable to add %s", filename)
+	}
+	log.Println(stdOut)
+	message := fmt.Sprintf("Update %s", filename)
+	stdOut, stdErr = gitCommit(message)
+	if stdErr.Len() > 0 {
+		return fmt.Errorf("Unable to commit message: %s", message)
+	}
+	log.Println(stdOut)
+	return nil
 }
 
 func buildFilename(title string) string {
-	return filepath.Join(config.DataDir, (title + ".txt"))
+	return title + ".txt"
 }
 
-func loadPage(title string) (*Page, error) {
+func loadPage(title string, revision string) (*Page, error) {
 	filename := buildFilename(title)
-	body, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
+	if len(revision) == 0 {
+		revision = "HEAD"
 	}
-	return &Page{Title: title, Body: string(body)}, nil
+	body, err := gitShow(filename, revision)
+	if err.Len() > 0 {
+		return &Page{Title: title, Body: body.String()}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
+	}
+	return &Page{Title: title, Body: body.String()}, nil
+}
+
+func gitShow(file string, revision string) (out, err *bytes.Buffer) {
+	res, out, err := repo.Git("show", fmt.Sprintf("%s:%s", revision, file))
+	runErr := res.Run()
+	if runErr != nil {
+		log.Println("Unable to load revision %s from %s, error: %v\n", revision, file, runErr)
+	}
+	return
+}
+
+func gitAdd(file string) (out, err *bytes.Buffer) {
+	res, out, err := repo.Git("add", file)
+	runErr := res.Run()
+	if runErr != nil {
+		log.Printf("Unable to add file %s, error: %v\n", file, runErr)
+	}
+	return
+}
+
+func gitCommit(message string) (out, err *bytes.Buffer) {
+	res, out, err := repo.Git("commit", "-m", message)
+	runErr := res.Run()
+	if runErr != nil {
+		log.Println("Unable to commit message %s, error: %v\n", message, runErr)
+	}
+	return
+}
+
+func gitLog(file string) (out, err *bytes.Buffer) {
+	res, out, err := repo.Git("log", "--pretty=format:%h %ad %s", "--date=relative", file)
+	runErr := res.Run()
+	if runErr != nil {
+		log.Println("Unable to load log of %s, error: %v\n", file, runErr)
+	}
+	return
 }
 
 func processLinks(content []byte) []byte {
@@ -75,7 +133,7 @@ func processLinks(content []byte) []byte {
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title)
+	p, err := loadPage(title, "HEAD")
 	if err != nil {
 		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
 		return
@@ -90,7 +148,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title)
+	p, err := loadPage(title, "HEAD")
 	if err != nil {
 		p = &Page{Title: title}
 	}
@@ -140,6 +198,13 @@ func main() {
 		return
 	}
 
+	// Load repo
+	var err error
+	if repo, err = git.Open(config.DataDir); err != nil {
+		log.Fatalf("Unable to open the repo at %s. Please check to make sure it exists and is initialized.\n%v", config.DataDir, err)
+	}
+
+	// Define routes
 	http.Handle("/static/", http.FileServer(http.Dir("./")))
 	http.HandleFunc("/", makeHandler(viewHandler))
 	http.HandleFunc("/view/", makeHandler(viewHandler))
