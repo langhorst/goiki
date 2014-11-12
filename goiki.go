@@ -51,7 +51,6 @@ func init() {
 	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
-
 }
 
 func (p *Page) save() error {
@@ -60,17 +59,20 @@ func (p *Page) save() error {
 	if err != nil {
 		return err
 	}
+
 	stdOut, stdErr := gitAdd(filename)
 	if stdErr.Len() > 0 {
 		return fmt.Errorf("Unable to add %s", filename)
 	}
-	log.Println(stdOut)
+	log.Println("add:", stdOut)
+
 	message := fmt.Sprintf("Update %s", filename)
 	stdOut, stdErr = gitCommit(message)
 	if stdErr.Len() > 0 {
 		return fmt.Errorf("Unable to commit message: %s", message)
 	}
-	log.Println(stdOut)
+	log.Println("commit:", stdOut)
+
 	return nil
 }
 
