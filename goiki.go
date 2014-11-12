@@ -100,7 +100,7 @@ func gitShow(file string, revision string) (out, err *bytes.Buffer) {
 	res, out, err := repo.Git("show", fmt.Sprintf("%s:%s", revision, file))
 	runErr := res.Run()
 	if runErr != nil {
-		log.Println("Unable to load revision %s from %s, error: %v\n", revision, file, runErr)
+		log.Printf("Unable to load revision %s from %s, error: %v\n", revision, file, runErr)
 	}
 	return
 }
