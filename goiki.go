@@ -35,15 +35,18 @@ type Config struct {
 	Port    int
 	Host    string
 	DataDir string
+	Name    string
 }
 
 type Page struct {
 	Title       string
 	Body        string
 	Description string
+	Site        Config
 }
 
 func init() {
+	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
 	flag.IntVar(&config.Port, "port", 4567, "Bind port")
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
@@ -91,9 +94,13 @@ func loadPage(title string, revision string) (*Page, error) {
 	}
 	body, err := gitShow(filename, revision)
 	if err.Len() > 0 {
-		return &Page{Title: title, Body: body.String()}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
+		return &Page{
+			Title: title,
+			Body:  body.String(),
+			Site:  config,
+		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
-	return &Page{Title: title, Body: body.String()}, nil
+	return &Page{Title: title, Body: body.String(), Site: config}, nil
 }
 
 func gitShow(file string, revision string) (out, err *bytes.Buffer) {
@@ -204,6 +211,8 @@ func main() {
 		fmt.Println("Goiki", GOIKIVERSION)
 		return
 	}
+
+	fmt.Println(config)
 
 	// Load repo
 	var err error
