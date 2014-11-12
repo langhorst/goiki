@@ -38,8 +38,9 @@ type Config struct {
 }
 
 type Page struct {
-	Title string
-	Body  string
+	Title       string
+	Body        string
+	Description string
 }
 
 func init() {
@@ -66,7 +67,10 @@ func (p *Page) save() error {
 	}
 	log.Println("add:", stdOut)
 
-	message := fmt.Sprintf("Update %s", filename)
+	message := p.Description
+	if len(message) == 0 {
+		message = fmt.Sprintf("Update %s", filename)
+	}
 	stdOut, stdErr = gitCommit(message)
 	if stdErr.Len() > 0 {
 		return fmt.Errorf("Unable to commit message: %s", message)
@@ -159,7 +163,8 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
-	p := &Page{Title: title, Body: body}
+	description := r.FormValue("description")
+	p := &Page{Title: title, Body: body, Description: description}
 	err := p.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
