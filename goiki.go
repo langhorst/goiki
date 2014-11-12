@@ -25,6 +25,7 @@ var (
 	config         Config
 	templates      *template.Template
 	validPath      *regexp.Regexp
+	validLink      *regexp.Regexp
 )
 
 type Config struct {
@@ -46,6 +47,7 @@ func init() {
 
 	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
+	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
 
 func (p *Page) save() error {
@@ -67,9 +69,8 @@ func loadPage(title string) (*Page, error) {
 }
 
 func processLinks(content []byte) []byte {
-	re := regexp.MustCompile(`\[([^\]]+)]\(\)`)
-	return re.ReplaceAllFunc(content, func(match []byte) []byte {
-		return re.ReplaceAll(match, []byte("[$1]($1)"))
+	return validLink.ReplaceAllFunc(content, func(match []byte) []byte {
+		return validLink.ReplaceAll(match, []byte("[$1]($1)"))
 	})
 }
 
