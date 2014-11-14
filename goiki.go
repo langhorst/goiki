@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"text/template"
@@ -74,7 +75,13 @@ func init() {
 
 func (p *Page) save() error {
 	filename := buildFilename(p.Title)
-	err := ioutil.WriteFile(filepath.Join(config.DataDir, filename), []byte(p.Body), 0600)
+	datapath := buildDataPath(filename)
+
+	err := os.MkdirAll(filepath.Dir(datapath), 0777)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(datapath, []byte(p.Body), 0600)
 	if err != nil {
 		return err
 	}
@@ -100,6 +107,10 @@ func (p *Page) save() error {
 
 func buildFilename(title string) string {
 	return title + ".txt"
+}
+
+func buildDataPath(filename string) string {
+	return filepath.Join(config.DataDir, filename)
 }
 
 func loadPage(title string, revision string) (*Page, error) {
@@ -154,6 +165,25 @@ func gitLog(file string) (out, err *bytes.Buffer) {
 	return
 }
 
+func parseLog(bytes []byte) *Revision {
+	line := string(bytes)
+	re := regexp.MustCompile(`(.{0,7}) (\d+ \w+ ago) (.*)`)
+	matches := re.FindStringSubmatch(line)
+	if len(matches) == 4 {
+		return &Revision{Object: matches[1], Timestamp: matches[2], Description: matches[3]}
+	}
+	return nil
+	/* TODO
+	   we want to show more information in the log; author for example
+	   and then gather up the log, parsing it into Revisions (or rename to Log)
+	   then we can use the historyHandler to display all available revisions and
+	   provide links to show that content.
+
+	   also look into what it takes to do diffs on the material as it should be
+	   similar
+	*/
+}
+
 func processLinks(content []byte) []byte {
 	return validLink.ReplaceAllFunc(content, func(match []byte) []byte {
 		return validLink.ReplaceAll(match, []byte("[$1]($1)"))
@@ -197,23 +227,22 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	author := Author{Name: "Anonymous", Email: ""}
+	stdOut, stdErr := gitLog(buildFilename(title))
+	if stdErr.Len() > 0 {
+		log.Println("No thank you")
+	}
+	var bytes []byte
+	var err error
 	revisions := make([]Revision, 0)
-	/*
-		revisions[0] = Revision{
-			Object:      "123",
-			Title:       title,
-			Description: "A description",
-			Author:      author,
-			Timestamp:   "Dec 12",
+	for err == nil {
+		bytes, err = stdOut.ReadBytes('\n')
+		revision := parseLog(bytes)
+		if revision == nil {
+			continue
 		}
-		revisions[1] = Revision{
-			Object:      "456",
-			Title:       title,
-			Description: "Another description",
-			Author:      author,
-			Timestamp:   "Dec 11",
-		}
-	*/
+		revision.Author = author
+		revisions = append(revisions, *revision)
+	}
 	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions, Author: author}
 	renderTemplate(w, "history", p)
 }
