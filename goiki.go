@@ -38,11 +38,26 @@ type Config struct {
 	Name    string
 }
 
+type Author struct {
+	Name  string
+	Email string
+}
+
+type Revision struct {
+	Object      string
+	Title       string
+	Description string
+	Author      Author
+	Timestamp   string
+}
+
 type Page struct {
+	Author      Author
 	Title       string
 	Body        string
 	Description string
 	Site        Config
+	Revisions   []Revision
 }
 
 func init() {
@@ -52,8 +67,8 @@ func init() {
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
-	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html"))
-	validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9/]+)$")
+	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html", "templates/history.html"))
+	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
 
@@ -180,6 +195,29 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
+func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
+	author := Author{Name: "Anonymous", Email: ""}
+	revisions := make([]Revision, 0)
+	/*
+		revisions[0] = Revision{
+			Object:      "123",
+			Title:       title,
+			Description: "A description",
+			Author:      author,
+			Timestamp:   "Dec 12",
+		}
+		revisions[1] = Revision{
+			Object:      "456",
+			Title:       title,
+			Description: "Another description",
+			Author:      author,
+			Timestamp:   "Dec 11",
+		}
+	*/
+	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions, Author: author}
+	renderTemplate(w, "history", p)
+}
+
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
 	if err != nil {
@@ -226,6 +264,7 @@ func main() {
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
 	http.HandleFunc("/save/", makeHandler(saveHandler))
+	http.HandleFunc("/history/", makeHandler(historyHandler))
 
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
 	if err != nil {
