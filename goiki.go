@@ -191,7 +191,11 @@ func processLinks(content []byte) []byte {
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title, "HEAD")
+	revision := r.FormValue("revision")
+	if revision == "" {
+		revision = "HEAD"
+	}
+	p, err := loadPage(title, revision)
 	if err != nil {
 		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
 		return
@@ -241,6 +245,7 @@ func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 			continue
 		}
 		revision.Author = author
+		revision.Title = title
 		revisions = append(revisions, *revision)
 	}
 	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions, Author: author}
