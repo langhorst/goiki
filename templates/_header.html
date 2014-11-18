@@ -34,6 +34,10 @@
           <li><a href="/edit/{{.Title}}">Edit</a></li>
           <li><a href="/history/{{.Title}}">History</a></li>
         </ul>
+        <form role="form" action="/search/" method="POST" class="navbar-form navbar-right">
+          <input type="text" name="search" class="form-control" placeholder="Search...">
+          <button type="submit" class="btn btn-default">Search</button>
+        </form>
       </div><!-- /.nav-collapse -->
     </div>
   </nav>

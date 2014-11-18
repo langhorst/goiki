@@ -1,0 +1,13 @@
+{{define "search"}}
+{{template "header" .}}
+
+    <h1>Search Results</h1>
+    
+    <ul>
+      {{range .Results}}
+      <li><a href="/view/{{.Title}}">{{.Title}}</a> - {{.Content}}</li>
+      {{end}}
+    </ul>
+
+{{template "footer"}}
+{{end}}

@@ -61,6 +61,17 @@ type Page struct {
 	Revisions   []Revision
 }
 
+type Result struct {
+	Title string
+ 	Content string
+}
+
+type SearchPage struct {
+	Title string
+	Results []Result
+	Site Config
+}
+
 
 func (p *Page) save() error {
 	filename := fileName(p.Title)
@@ -75,21 +86,20 @@ func (p *Page) save() error {
 		return err
 	}
 
-	stdOut, err := gitAdd(filename)
+	_, err = gitAdd(filename)
 	if err != nil {
 		return err
 	}
-	log.Println("add:", stdOut)
 
 	message := p.Description
 	if len(message) == 0 {
 		message = fmt.Sprintf("Update %s", filename)
 	}
-	stdOut, err = gitCommit(message)
+	stdout, err := gitCommit(message)
 	if err != nil {
 		return err
 	}
-	log.Println("commit:", stdOut)
+	log.Println(stdout)
 
 	return nil
 }
@@ -130,6 +140,11 @@ func gitLog(file string) (out *bytes.Buffer, err error) {
 	return gitExec("log", "--pretty=format:%h %ad %s", "--date=relative", file)
 }
 
+func gitGrep(keyword string) (out *bytes.Buffer, err error) {
+	log.Println("grep keyword", keyword)
+	return gitExec("grep", "--ignore-case", keyword)
+}
+
 func loadPage(title string, revision string) (*Page, error) {
 	filename := fileName(title)
 	if len(revision) == 0 {
@@ -165,15 +180,29 @@ func parseLog(bytes []byte) *Revision {
 	*/
 }
 
-// Process wiki links (empty Markdown link syntax)
+func parseGrepOutput(output *bytes.Buffer) []Result {
+	var err error
+	var bytes []byte
+	results := make([]Result, 0)
+
+	log.Println("grep output", output.String())
+	re := regexp.MustCompile(`(.+)\.txt:(.*)`)
+	for err == nil {
+		bytes, err = output.ReadBytes('\n')
+		matches := re.FindStringSubmatch(string(bytes))
+		if len(matches) == 3 {
+			results = append(results, Result{Title: matches[1], Content: matches[2]})
+		}
+	}
+	return results
+}
+
 func processLinks(content []byte, link *regexp.Regexp) []byte {
 	return link.ReplaceAllFunc(content, func(match []byte) []byte {
 		return link.ReplaceAll(match, []byte("[$1]($1)"))
 	})
 }
 
-// Render a template to the given ResponseWriter along with the template name
-// and Page object.
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	err := templates.ExecuteTemplate(w, tmpl, p)
 	if err != nil {
@@ -181,15 +210,21 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 	}
 }
 
-// Make a handler.
+func renderSearchTemplate(w http.ResponseWriter, tmpl string, p *SearchPage) {
+	err := templates.ExecuteTemplate(w, tmpl, p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		log.Println(path)
 		if path == "/" {
 			http.Redirect(w, r, "/view/FrontPage", http.StatusFound)
 			return
 		}
-		fmt.Println(path)
 		m := validPath.FindStringSubmatch(path)
 		if m == nil {
 			http.NotFound(w, r)
@@ -199,9 +234,6 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 	}
 }
 
-// Handle viewing pages. Load a page revision and render it to the response
-// writer. If the page is not found, redirect to the edit page for the given
-// title to create a new page.
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revision := r.FormValue("revision")
 	if revision == "" {
@@ -222,9 +254,6 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "view", p)
 }
 
-// Handle editing pages. Load a page revision and render the raw content to
-// the response writer. If the page is not found, we simply provide an empty
-// page in order to create/save a new page.
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revision := r.FormValue("revision")
 	if revision == "" {
@@ -239,7 +268,6 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "edit", p)
 }
 
-// Handle saving pages.
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
 	description := r.FormValue("description")
@@ -252,7 +280,6 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
-// Handle viewing page history.
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	author := Author{Name: "Anonymous", Email: ""}
 	stdOut, logErr := gitLog(fileName(title))
@@ -276,6 +303,18 @@ func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "history", p)
 }
 
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	search := r.FormValue("search")
+	grep, err := gitGrep(search)
+	if err != nil {
+		log.Println("error in search", err)
+	}
+
+	results := parseGrepOutput(grep)
+	sp := &SearchPage{Title: "Search", Results: results, Site: config}
+	renderSearchTemplate(w, "search", sp)
+}
+
 // Initialize the configuration options, templates and URL and link regexes.
 func init() {
 	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
@@ -284,7 +323,7 @@ func init() {
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
-	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html"))
+	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html", "templates/search.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
@@ -310,6 +349,7 @@ func main() {
 
 	// Define routes
 	http.Handle("/static/", http.FileServer(http.Dir("./")))
+	http.HandleFunc("/search/", searchHandler)
 	http.HandleFunc("/", makeHandler(viewHandler))
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
