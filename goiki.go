@@ -61,21 +61,10 @@ type Page struct {
 	Revisions   []Revision
 }
 
-func init() {
-	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
-	flag.IntVar(&config.Port, "port", 4567, "Bind port")
-	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
-	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
-	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
-
-	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html", "templates/history.html"))
-	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
-	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
-}
 
 func (p *Page) save() error {
-	filename := buildFilename(p.Title)
-	datapath := buildDataPath(filename)
+	filename := fileName(p.Title)
+	datapath := dataPath(config.DataDir, filename)
 
 	err := os.MkdirAll(filepath.Dir(datapath), 0777)
 	if err != nil {
@@ -86,9 +75,9 @@ func (p *Page) save() error {
 		return err
 	}
 
-	stdOut, stdErr := gitAdd(filename)
-	if stdErr.Len() > 0 {
-		return fmt.Errorf("Unable to add %s", filename)
+	stdOut, err := gitAdd(filename)
+	if err != nil {
+		return err
 	}
 	log.Println("add:", stdOut)
 
@@ -96,30 +85,58 @@ func (p *Page) save() error {
 	if len(message) == 0 {
 		message = fmt.Sprintf("Update %s", filename)
 	}
-	stdOut, stdErr = gitCommit(message)
-	if stdErr.Len() > 0 {
-		return fmt.Errorf("Unable to commit message: %s", message)
+	stdOut, err = gitCommit(message)
+	if err != nil {
+		return err
 	}
 	log.Println("commit:", stdOut)
 
 	return nil
 }
 
-func buildFilename(title string) string {
+func fileName(title string) string {
 	return title + ".txt"
 }
 
-func buildDataPath(filename string) string {
-	return filepath.Join(config.DataDir, filename)
+func dataPath(dir string, file string) string {
+	return filepath.Join(dir, file)
+}
+
+func gitExec(command string, args ...string) (out *bytes.Buffer, err error) {
+	err = nil
+	res, out, stderr := repo.Git(command, args...)
+	runErr := res.Run()
+	if runErr != nil {
+		return out, runErr
+	} else if stderr.Len() > 0 {
+		return out, fmt.Errorf(stderr.String())
+	}
+	return
+}
+
+func gitShow(file string, revision string) (out *bytes.Buffer, err error) {
+	return gitExec("show", fmt.Sprintf("%s:%s", revision, file))
+}
+
+func gitAdd(file string) (out *bytes.Buffer, err error) {
+	return gitExec("add", file)
+}
+
+func gitCommit(message string) (out *bytes.Buffer, err error) {
+	return gitExec("commit", "-m", message)
+}
+
+func gitLog(file string) (out *bytes.Buffer, err error) {
+	return gitExec("log", "--pretty=format:%h %ad %s", "--date=relative", file)
 }
 
 func loadPage(title string, revision string) (*Page, error) {
-	filename := buildFilename(title)
+	filename := fileName(title)
 	if len(revision) == 0 {
 		revision = "HEAD"
 	}
 	body, err := gitShow(filename, revision)
-	if err.Len() > 0 {
+	if err != nil {
 		return &Page{
 			Title: title,
 			Body:  body.String(),
@@ -127,42 +144,6 @@ func loadPage(title string, revision string) (*Page, error) {
 		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
 	return &Page{Title: title, Body: body.String(), Site: config}, nil
-}
-
-func gitShow(file string, revision string) (out, err *bytes.Buffer) {
-	res, out, err := repo.Git("show", fmt.Sprintf("%s:%s", revision, file))
-	runErr := res.Run()
-	if runErr != nil {
-		log.Printf("Unable to load revision %s from %s, error: %v\n", revision, file, runErr)
-	}
-	return
-}
-
-func gitAdd(file string) (out, err *bytes.Buffer) {
-	res, out, err := repo.Git("add", file)
-	runErr := res.Run()
-	if runErr != nil {
-		log.Printf("Unable to add file %s, error: %v\n", file, runErr)
-	}
-	return
-}
-
-func gitCommit(message string) (out, err *bytes.Buffer) {
-	res, out, err := repo.Git("commit", "-m", message)
-	runErr := res.Run()
-	if runErr != nil {
-		log.Println("Unable to commit message %s, error: %v\n", message, runErr)
-	}
-	return
-}
-
-func gitLog(file string) (out, err *bytes.Buffer) {
-	res, out, err := repo.Git("log", "--pretty=format:%h %ad %s", "--date=relative", file)
-	runErr := res.Run()
-	if runErr != nil {
-		log.Println("Unable to load log of %s, error: %v\n", file, runErr)
-	}
-	return
 }
 
 func parseLog(bytes []byte) *Revision {
@@ -184,17 +165,48 @@ func parseLog(bytes []byte) *Revision {
 	*/
 }
 
-func processLinks(content []byte) []byte {
-	return validLink.ReplaceAllFunc(content, func(match []byte) []byte {
-		return validLink.ReplaceAll(match, []byte("[$1]($1)"))
+// Process wiki links (empty Markdown link syntax)
+func processLinks(content []byte, link *regexp.Regexp) []byte {
+	return link.ReplaceAllFunc(content, func(match []byte) []byte {
+		return link.ReplaceAll(match, []byte("[$1]($1)"))
 	})
 }
 
+// Render a template to the given ResponseWriter along with the template name
+// and Page object.
+func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
+	err := templates.ExecuteTemplate(w, tmpl+".html", p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// Make a handler.
+func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if path == "/" {
+			path = "/view/FrontPage"
+		}
+		fmt.Println(path)
+		m := validPath.FindStringSubmatch(path)
+		if m == nil {
+			http.NotFound(w, r)
+			return
+		}
+		fn(w, r, m[2])
+	}
+}
+
+// Handle viewing pages. Load a page revision and render it to the response
+// writer. If the page is not found, redirect to the edit page for the given
+// title to create a new page.
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revision := r.FormValue("revision")
 	if revision == "" {
 		revision = "HEAD"
 	}
+
 	p, err := loadPage(title, revision)
 	if err != nil {
 		http.Redirect(w, r, "/edit/"+title, http.StatusFound)
@@ -202,21 +214,31 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	}
 
 	content := []byte(p.Body)
-	content = processLinks(content)
+	content = processLinks(content, validLink)
 	content = blackfriday.MarkdownCommon(content)
 	p.Body = string(content)
 
 	renderTemplate(w, "view", p)
 }
 
+// Handle editing pages. Load a page revision and render the raw content to
+// the response writer. If the page is not found, we simply provide an empty
+// page in order to create/save a new page.
 func editHandler(w http.ResponseWriter, r *http.Request, title string) {
-	p, err := loadPage(title, "HEAD")
+	revision := r.FormValue("revision")
+	if revision == "" {
+		revision = "HEAD"
+	}
+
+	p, err := loadPage(title, revision)
 	if err != nil {
 		p = &Page{Title: title}
 	}
+
 	renderTemplate(w, "edit", p)
 }
 
+// Handle saving pages.
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
 	description := r.FormValue("description")
@@ -229,11 +251,12 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
+// Handle viewing page history.
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	author := Author{Name: "Anonymous", Email: ""}
-	stdOut, stdErr := gitLog(buildFilename(title))
-	if stdErr.Len() > 0 {
-		log.Println("No thank you")
+	stdOut, logErr := gitLog(fileName(title))
+	if logErr != nil {
+		log.Println(logErr)
 	}
 	var bytes []byte
 	var err error
@@ -252,29 +275,21 @@ func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "history", p)
 }
 
-func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
-	err := templates.ExecuteTemplate(w, tmpl+".html", p)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+// Initialize the configuration options, templates and URL and link regexes.
+func init() {
+	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
+	flag.IntVar(&config.Port, "port", 4567, "Bind port")
+	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
+	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
+	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
+
+	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html", "templates/history.html"))
+	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
+	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
 
-func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		if path == "/" {
-			path = "/view/FrontPage"
-		}
-		fmt.Println(path)
-		m := validPath.FindStringSubmatch(path)
-		if m == nil {
-			http.NotFound(w, r)
-			return
-		}
-		fn(w, r, m[2])
-	}
-}
-
+// Main. Parse the configuration flags and start the web server based on those
+// configuration flags.
 func main() {
 	flag.Parse()
 
@@ -284,7 +299,7 @@ func main() {
 		return
 	}
 
-	fmt.Println(config)
+	log.Println(config)
 
 	// Load repo
 	var err error

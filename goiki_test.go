@@ -18,7 +18,7 @@ func TestProcessLinks(t *testing.T) {
 	}
 
 	for i := 0; i < len(originals); i++ {
-		processed := processLinks(originals[i])
+		processed := processLinks(originals[i], validLink)
 		if string(processed) != string(results[i]) {
 			t.Errorf("Expected >%s<, got >%s<\n", results[i], processed)
 		}
@@ -39,7 +39,7 @@ func TestProcessLinksWithSubdirectories(t *testing.T) {
 	}
 
 	for i := 0; i < len(originals); i++ {
-		processed := processLinks(originals[i])
+		processed := processLinks(originals[i], validLink)
 		if string(processed) != string(results[i]) {
 			t.Errorf("Expected >%s<, got >%s<\n", results[i], processed)
 		}
