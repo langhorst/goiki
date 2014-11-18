@@ -186,7 +186,8 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if path == "/" {
-			path = "/view/FrontPage"
+			http.Redirect(w, r, "/view/FrontPage", http.StatusFound)
+			return
 		}
 		fmt.Println(path)
 		m := validPath.FindStringSubmatch(path)
@@ -232,7 +233,7 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 
 	p, err := loadPage(title, revision)
 	if err != nil {
-		p = &Page{Title: title}
+		p = &Page{Title: title, Site: config}
 	}
 
 	renderTemplate(w, "edit", p)
