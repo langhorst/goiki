@@ -175,7 +175,7 @@ func processLinks(content []byte, link *regexp.Regexp) []byte {
 // Render a template to the given ResponseWriter along with the template name
 // and Page object.
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
-	err := templates.ExecuteTemplate(w, tmpl+".html", p)
+	err := templates.ExecuteTemplate(w, tmpl, p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -284,7 +284,7 @@ func init() {
 	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
-	templates = template.Must(template.ParseFiles("templates/edit.html", "templates/view.html", "templates/history.html"))
+	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
