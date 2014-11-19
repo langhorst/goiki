@@ -1,8 +1,20 @@
 GOIKI
 =====
 
-**NOTE:** This project is in the earliest stages possible and is my first foray into the Go language.
+Goiki is a git-powered wiki written in Golang. It incorporates Markdown syntax (with extras) and uses Go templates for flexibility in look and feel.
 
-Goiki is a git-powered wiki written in Golang. It incorporates Markdown for syntax (with extras) and uses Go templates for flexibility in look and feel.
+Why? Because I wanted a stand-alone executable that would run on a Raspberry Pi to serve as a documentation server for the home. Gollum was a little too slow and Gitit won't compile (easily).
 
-Why? Because I wanted a stand-alone executable that would run on a Raspberry Pi to serve as a home documentation server. 
+Requirements
+------------
+
+* git
+
+TODOs
+-----
+
+* Add support for authors within the git log
+* Add basic authentication support
+* Use authenticated user information for commits
+* Compile templates/static content into the final binary
+* Add support for uploading files
