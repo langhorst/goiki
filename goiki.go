@@ -3,6 +3,7 @@ package main
 import (
 	// stdlib
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 
 	// external
 	"github.com/VictorLowther/go-git/git"
+	auth "github.com/abbot/go-http-auth"
 	"github.com/russross/blackfriday"
 )
 
@@ -30,13 +32,23 @@ var (
 	validPath      *regexp.Regexp
 	validLink      *regexp.Regexp
 	repo           *git.Repo
+	authenticator  *auth.BasicAuth
+	users          map[string]User
 )
 
 type Config struct {
-	Port    int
-	Host    string
-	DataDir string
-	Name    string
+	Port     int
+	Host     string
+	DataDir  string
+	AuthFile string
+	Name     string
+}
+
+type User struct {
+	Username string
+	Password string
+	Name     string
+	Email    string
 }
 
 type Author struct {
@@ -62,16 +74,15 @@ type Page struct {
 }
 
 type Result struct {
-	Title string
- 	Content string
+	Title   string
+	Content string
 }
 
 type SearchPage struct {
-	Title string
+	Title   string
 	Results []Result
-	Site Config
+	Site    Config
 }
-
 
 func (p *Page) save() error {
 	filename := fileName(p.Title)
@@ -234,6 +245,19 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 	}
 }
 
+func makeAuthHandler(fn func(http.ResponseWriter, *auth.AuthenticatedRequest, string)) auth.AuthenticatedHandlerFunc {
+	return func(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
+		path := r.URL.Path
+		log.Println(path)
+		m := validPath.FindStringSubmatch(path)
+		if m == nil {
+			http.NotFound(w, &r.Request)
+			return
+		}
+		fn(w, r, m[2])
+	}
+}
+
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revision := r.FormValue("revision")
 	if revision == "" {
@@ -254,7 +278,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "view", p)
 }
 
-func editHandler(w http.ResponseWriter, r *http.Request, title string) {
+func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title string) {
 	revision := r.FormValue("revision")
 	if revision == "" {
 		revision = "HEAD"
@@ -268,7 +292,7 @@ func editHandler(w http.ResponseWriter, r *http.Request, title string) {
 	renderTemplate(w, "edit", p)
 }
 
-func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
+func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title string) {
 	body := r.FormValue("body")
 	description := r.FormValue("description")
 	p := &Page{Title: title, Body: body, Description: description}
@@ -277,7 +301,7 @@ func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/view/"+title, http.StatusFound)
+	http.Redirect(w, &r.Request, "/view/"+title, http.StatusFound)
 }
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
@@ -320,12 +344,44 @@ func init() {
 	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
 	flag.IntVar(&config.Port, "port", 4567, "Bind port")
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
-	flag.StringVar(&config.DataDir, "data-dir", "./data", "Directory for page data")
+	flag.StringVar(&config.DataDir, "data", "./data", "Directory for page data")
+	flag.StringVar(&config.AuthFile, "auth", "./auth.json", "File containing user authentication")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
+	flag.Parse()
+
+	users, _ = loadAuth(config.AuthFile)
+
+	authenticator = auth.NewBasicAuthenticator(serviceAddress(config.Host, config.Port), secret)
 	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html", "templates/search.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
+}
+
+func secret(username, realm string) string {
+	return users[username].Password
+}
+
+func loadAuth(file string) (map[string]User, error) {
+	var auth map[string]User
+	authJson, err := ioutil.ReadFile(file)
+	if err != nil {
+		return auth, err
+	}
+	var users []User
+	err = json.Unmarshal(authJson, &users)
+	if err != nil {
+		return auth, err
+	}
+	auth = make(map[string]User, len(users))
+	for _, user := range users {
+		auth[user.Username] = user
+	}
+	return auth, nil
+}
+
+func serviceAddress(host string, port int) string {
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 // Main. Parse the configuration flags and start the web server based on those
@@ -348,15 +404,17 @@ func main() {
 	}
 
 	// Define routes
+	//http.HandleFunc("/", authenticator.Wrap(authHandler))
 	http.Handle("/static/", http.FileServer(http.Dir("./")))
 	http.HandleFunc("/search/", searchHandler)
 	http.HandleFunc("/", makeHandler(viewHandler))
 	http.HandleFunc("/view/", makeHandler(viewHandler))
-	http.HandleFunc("/edit/", makeHandler(editHandler))
-	http.HandleFunc("/save/", makeHandler(saveHandler))
 	http.HandleFunc("/history/", makeHandler(historyHandler))
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port))
+	http.HandleFunc("/edit/", authenticator.Wrap(makeAuthHandler(editHandler)))
+	http.HandleFunc("/save/", authenticator.Wrap(makeAuthHandler(saveHandler)))
+
+	l, err := net.Listen("tcp", serviceAddress(config.Host, config.Port))
 	if err != nil {
 		log.Fatal(err)
 	}
