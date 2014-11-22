@@ -56,6 +56,10 @@ type Author struct {
 	Email string
 }
 
+func (a *Author) String() string {
+	return fmt.Sprintf("%s <%s>", a.Name, a.Email)
+}
+
 type Revision struct {
 	Object      string
 	Title       string
@@ -106,7 +110,7 @@ func (p *Page) save() error {
 	if len(message) == 0 {
 		message = fmt.Sprintf("Update %s", filename)
 	}
-	stdout, err := gitCommit(message)
+	stdout, err := gitCommit(message, p.Author)
 	if err != nil {
 		return err
 	}
@@ -143,8 +147,11 @@ func gitAdd(file string) (out *bytes.Buffer, err error) {
 	return gitExec("add", file)
 }
 
-func gitCommit(message string) (out *bytes.Buffer, err error) {
-	return gitExec("commit", "-m", message)
+func gitCommit(message string, author Author) (out *bytes.Buffer, err error) {
+	if author.String() == "" {
+		return gitExec("commit", "-m", message)
+	}
+	return gitExec("commit", "-m", message, "--author", author.String())
 }
 
 func gitLog(file string) (out *bytes.Buffer, err error) {
@@ -295,7 +302,9 @@ func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title string) {
 	body := r.FormValue("body")
 	description := r.FormValue("description")
-	p := &Page{Title: title, Body: body, Description: description}
+	user := users[r.Username]
+	author := Author{Name: user.Name, Email: user.Email}
+	p := &Page{Title: title, Body: body, Description: description, Author: author}
 	err := p.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
