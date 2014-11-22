@@ -155,7 +155,7 @@ func gitCommit(message string, author Author) (out *bytes.Buffer, err error) {
 }
 
 func gitLog(file string) (out *bytes.Buffer, err error) {
-	return gitExec("log", "--pretty=format:%h %ad %s", "--date=relative", file)
+	return gitExec("log", "--pretty=format:%h %an <%ae> %ad %s", "--date=relative", file)
 }
 
 func gitGrep(keyword string) (out *bytes.Buffer, err error) {
@@ -181,10 +181,10 @@ func loadPage(title string, revision string) (*Page, error) {
 
 func parseLog(bytes []byte) *Revision {
 	line := string(bytes)
-	re := regexp.MustCompile(`(.{0,7}) (\d+ \w+ ago) (.*)`)
+	re := regexp.MustCompile(`(.{0,7}) (.+) (<.+>) (\d+ \w+ ago) (.*)`)
 	matches := re.FindStringSubmatch(line)
-	if len(matches) == 4 {
-		return &Revision{Object: matches[1], Timestamp: matches[2], Description: matches[3]}
+	if len(matches) == 6 {
+		return &Revision{Object: matches[1], Author: Author{Name: matches[2], Email: matches[3]}, Timestamp: matches[4], Description: matches[5]}
 	}
 	return nil
 	/* TODO
@@ -314,7 +314,6 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 }
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
-	author := Author{Name: "Anonymous", Email: ""}
 	stdOut, logErr := gitLog(fileName(title))
 	if logErr != nil {
 		log.Println(logErr)
@@ -328,11 +327,10 @@ func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 		if revision == nil {
 			continue
 		}
-		revision.Author = author
 		revision.Title = title
 		revisions = append(revisions, *revision)
 	}
-	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions, Author: author}
+	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions}
 	renderTemplate(w, "history", p)
 }
 
