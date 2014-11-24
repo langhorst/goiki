@@ -3,7 +3,6 @@ package main
 import (
 	// stdlib
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -26,30 +25,38 @@ const (
 )
 
 var (
+	configFile     string
 	displayVersion bool
-	config         Config
+	conf           config
 	templates      *template.Template
 	validPath      *regexp.Regexp
 	validLink      *regexp.Regexp
 	repo           *git.Repo
 	authenticator  *auth.BasicAuth
-	users          map[string]User
+	users          map[string]user
 )
 
+/*
 type Config struct {
-	Port     int
-	Host     string
-	DataDir  string
-	AuthFile string
-	Name     string
+	Name        string
+	Port        int
+	Host        string
+	DataDir     string
+	TemplateDir string
+	Users       map[string]User
+	AuthFile    string
+	Name        string
 }
+*/
 
+/*
 type User struct {
 	Username string
 	Password string
 	Name     string
 	Email    string
 }
+*/
 
 type Author struct {
 	Name  string
@@ -73,7 +80,7 @@ type Page struct {
 	Title       string
 	Body        string
 	Description string
-	Site        Config
+	Site        config
 	Revisions   []Revision
 }
 
@@ -85,12 +92,12 @@ type Result struct {
 type SearchPage struct {
 	Title   string
 	Results []Result
-	Site    Config
+	Site    config
 }
 
 func (p *Page) save() error {
 	filename := fileName(p.Title)
-	datapath := dataPath(config.DataDir, filename)
+	datapath := dataPath(conf.DataDir, filename)
 
 	err := os.MkdirAll(filepath.Dir(datapath), 0777)
 	if err != nil {
@@ -173,10 +180,10 @@ func loadPage(title string, revision string) (*Page, error) {
 		return &Page{
 			Title: title,
 			Body:  body.String(),
-			Site:  config,
+			Site:  conf,
 		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
-	return &Page{Title: title, Body: body.String(), Site: config}, nil
+	return &Page{Title: title, Body: body.String(), Site: conf}, nil
 }
 
 func parseLog(bytes []byte) *Revision {
@@ -293,7 +300,7 @@ func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 
 	p, err := loadPage(title, revision)
 	if err != nil {
-		p = &Page{Title: title, Site: config}
+		p = &Page{Title: title, Site: conf}
 	}
 
 	renderTemplate(w, "edit", p)
@@ -330,7 +337,7 @@ func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 		revision.Title = title
 		revisions = append(revisions, *revision)
 	}
-	p := &Page{Title: title, Body: "", Site: config, Revisions: revisions}
+	p := &Page{Title: title, Body: "", Site: conf, Revisions: revisions}
 	renderTemplate(w, "history", p)
 }
 
@@ -342,24 +349,25 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := parseGrepOutput(grep)
-	sp := &SearchPage{Title: "Search", Results: results, Site: config}
+	sp := &SearchPage{Title: "Search", Results: results, Site: conf}
 	renderSearchTemplate(w, "search", sp)
 }
 
 // Initialize the configuration options, templates and URL and link regexes.
 func init() {
-	flag.StringVar(&config.Name, "name", "Goiki", "Wiki name")
-	flag.IntVar(&config.Port, "port", 4567, "Bind port")
-	flag.StringVar(&config.Host, "host", "0.0.0.0", "Hostname or IP address to listen on")
-	flag.StringVar(&config.DataDir, "data", "./data", "Directory for page data")
-	flag.StringVar(&config.AuthFile, "auth", "./auth.json", "File containing user authentication")
+	//flag.StringVar(&conf.AuthFile, "auth", "./auth.json", "File containing user authentication")
+	flag.StringVar(&configFile, "config", "./goiki.toml", "Location of configuration file")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
 	flag.Parse()
 
-	users, _ = loadAuth(config.AuthFile)
+	//users, _ = loadAuth(conf.AuthFile)
+	conf, err := loadConfig(configFile)
+	if err != nil {
+		panic(err)
+	}
 
-	authenticator = auth.NewBasicAuthenticator(serviceAddress(config.Host, config.Port), secret)
+	authenticator = auth.NewBasicAuthenticator(serviceAddress(conf.Host, conf.Port), secret)
 	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html", "templates/search.html"))
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
@@ -367,24 +375,6 @@ func init() {
 
 func secret(username, realm string) string {
 	return users[username].Password
-}
-
-func loadAuth(file string) (map[string]User, error) {
-	var auth map[string]User
-	authJson, err := ioutil.ReadFile(file)
-	if err != nil {
-		return auth, err
-	}
-	var users []User
-	err = json.Unmarshal(authJson, &users)
-	if err != nil {
-		return auth, err
-	}
-	auth = make(map[string]User, len(users))
-	for _, user := range users {
-		auth[user.Username] = user
-	}
-	return auth, nil
 }
 
 func serviceAddress(host string, port int) string {
@@ -402,12 +392,12 @@ func main() {
 		return
 	}
 
-	log.Println(config)
+	log.Println(conf)
 
 	// Load repo
 	var err error
-	if repo, err = git.Open(config.DataDir); err != nil {
-		log.Fatalf("Unable to open the repo at %s. Please check to make sure it exists and is initialized.\n%v", config.DataDir, err)
+	if repo, err = git.Open(conf.DataDir); err != nil {
+		log.Fatalf("Unable to open the repo at %s. Please check to make sure it exists and is initialized.\n%v", conf.DataDir, err)
 	}
 
 	// Define routes
@@ -421,7 +411,7 @@ func main() {
 	http.HandleFunc("/edit/", authenticator.Wrap(makeAuthHandler(editHandler)))
 	http.HandleFunc("/save/", authenticator.Wrap(makeAuthHandler(saveHandler)))
 
-	l, err := net.Listen("tcp", serviceAddress(config.Host, config.Port))
+	l, err := net.Listen("tcp", serviceAddress(conf.Host, conf.Port))
 	if err != nil {
 		log.Fatal(err)
 	}

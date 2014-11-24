@@ -1,0 +1,32 @@
+#
+# Goiki Configuration
+#
+
+# The name of the wiki; this is used in the packaged templates provided by Goiki
+name = "Goiki"
+
+# Hostname or IP address the webserver will listen on
+host = "0.0.0.0"
+
+# Port number the webserver will bind to
+port = 4567
+
+# Path to data files (the Git repo)
+data_dir = "./data"
+
+# Path to custom templates; leave empty to use the packaged templates
+template_dir = ""
+
+# Wiki users.
+#
+# Each user entry must provide a `name`, `email`, `username` and `password`.
+# `name` and `email` are used for Git commits, while `username` and
+# `password` are used for authenticating over HTTP. Passwords are blah blah
+# digest.
+#
+# Repeat the [[users]] section for additional users.
+[[users]]
+name = "Goiki"
+email = "goiki@example.com"
+username = "goiki"
+password = ""
