@@ -21,12 +21,14 @@ template_dir = ""
 #
 # Each user entry must provide a `name`, `email`, `username` and `password`.
 # `name` and `email` are used for Git commits, while `username` and
-# `password` are used for authenticating over HTTP. Passwords are blah blah
-# digest.
+# `password` are used for authenticating over HTTP.
+#
+# Passwords can be generated using `htpasswd`. Both MD5 and SHA1 passwords
+# are supported. 
 #
 # Repeat the [[users]] section for additional users.
 [[users]]
 name = "Goiki"
 email = "goiki@example.com"
 username = "goiki"
-password = ""
+password = "{SHA}4v0+mLtvlX3qyy5ISrQU5mw0Yhg="
