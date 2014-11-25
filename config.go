@@ -19,6 +19,15 @@ type config struct {
 	DataDir     string `toml:"data_dir"`
 	TemplateDir string `toml:"template_dir"`
 	Users       []user
+	Auth        map[string]user
+}
+
+func (c *config) loadAuth() {
+	auth := make(map[string]user, len(c.Users))
+	for _, user := range c.Users {
+		auth[user.Username] = user
+	}
+	c.Auth = auth
 }
 
 func loadConfig(filename string) (config, error) {
@@ -33,12 +42,4 @@ func loadConfig(filename string) (config, error) {
 		return c, err
 	}
 	return c, nil
-}
-
-func loadAuth(users []user) map[string]user {
-	auth := make(map[string]user, len(users))
-	for _, user := range users {
-		auth[user.Username] = user
-	}
-	return auth
 }

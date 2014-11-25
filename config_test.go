@@ -48,7 +48,7 @@ func TestConfigTemplateDir(t *testing.T) {
 
 func TestConfigUsers(t *testing.T) {
 	c, _ := loadConfig(testConfigFile)
-	u := user{Name: "Goiki", Email: "goiki@example.com", Username: "goiki", Password: ""}
+	u := user{Name: "Goiki", Email: "goiki@example.com", Username: "goiki", Password: "{SHA}4v0+mLtvlX3qyy5ISrQU5mw0Yhg="}
 
 	if len(c.Users) != 1 {
 		t.Errorf("Number of default users should equal to >1<, but is >%d<", len(c.Users))
