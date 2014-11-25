@@ -2,7 +2,6 @@ package main
 
 import (
 	// stdlib
-	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -31,67 +30,21 @@ var (
 	templates      *template.Template
 	validPath      *regexp.Regexp
 	validLink      *regexp.Regexp
-	repo           *git.Repo
 	authenticator  *auth.BasicAuth
-	users          map[string]user
 )
 
-/*
-type Config struct {
-	Name        string
-	Port        int
-	Host        string
-	DataDir     string
-	TemplateDir string
-	Users       map[string]User
-	AuthFile    string
-	Name        string
-}
-*/
-
-/*
-type User struct {
-	Username string
-	Password string
-	Name     string
-	Email    string
-}
-*/
-
-type Author struct {
-	Name  string
-	Email string
-}
-
-func (a *Author) String() string {
-	return fmt.Sprintf("%s <%s>", a.Name, a.Email)
-}
-
-type Revision struct {
-	Object      string
-	Title       string
-	Description string
-	Author      Author
-	Timestamp   string
-}
-
 type Page struct {
-	Author      Author
+	Author      author
 	Title       string
 	Body        string
 	Description string
 	Site        config
-	Revisions   []Revision
-}
-
-type Result struct {
-	Title   string
-	Content string
+	Revisions   []gitRevision
 }
 
 type SearchPage struct {
 	Title   string
-	Results []Result
+	Results []gitResult
 	Site    config
 }
 
@@ -134,42 +87,6 @@ func dataPath(dir string, file string) string {
 	return filepath.Join(dir, file)
 }
 
-func gitExec(command string, args ...string) (out *bytes.Buffer, err error) {
-	err = nil
-	res, out, stderr := repo.Git(command, args...)
-	runErr := res.Run()
-	if runErr != nil {
-		return out, runErr
-	} else if stderr.Len() > 0 {
-		return out, fmt.Errorf(stderr.String())
-	}
-	return
-}
-
-func gitShow(file string, revision string) (out *bytes.Buffer, err error) {
-	return gitExec("show", fmt.Sprintf("%s:%s", revision, file))
-}
-
-func gitAdd(file string) (out *bytes.Buffer, err error) {
-	return gitExec("add", file)
-}
-
-func gitCommit(message string, author Author) (out *bytes.Buffer, err error) {
-	if author.String() == "" {
-		return gitExec("commit", "-m", message)
-	}
-	return gitExec("commit", "-m", message, "--author", author.String())
-}
-
-func gitLog(file string) (out *bytes.Buffer, err error) {
-	return gitExec("log", "--pretty=format:%h %an <%ae> %ad %s", "--date=relative", file)
-}
-
-func gitGrep(keyword string) (out *bytes.Buffer, err error) {
-	log.Println("grep keyword", keyword)
-	return gitExec("grep", "--ignore-case", keyword)
-}
-
 func loadPage(title string, revision string) (*Page, error) {
 	filename := fileName(title)
 	if len(revision) == 0 {
@@ -184,42 +101,6 @@ func loadPage(title string, revision string) (*Page, error) {
 		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
 	return &Page{Title: title, Body: body.String(), Site: conf}, nil
-}
-
-func parseLog(bytes []byte) *Revision {
-	line := string(bytes)
-	re := regexp.MustCompile(`(.{0,7}) (.+) (<.+>) (\d+ \w+ ago) (.*)`)
-	matches := re.FindStringSubmatch(line)
-	if len(matches) == 6 {
-		return &Revision{Object: matches[1], Author: Author{Name: matches[2], Email: matches[3]}, Timestamp: matches[4], Description: matches[5]}
-	}
-	return nil
-	/* TODO
-	   we want to show more information in the log; author for example
-	   and then gather up the log, parsing it into Revisions (or rename to Log)
-	   then we can use the historyHandler to display all available revisions and
-	   provide links to show that content.
-
-	   also look into what it takes to do diffs on the material as it should be
-	   similar
-	*/
-}
-
-func parseGrepOutput(output *bytes.Buffer) []Result {
-	var err error
-	var bytes []byte
-	results := make([]Result, 0)
-
-	log.Println("grep output", output.String())
-	re := regexp.MustCompile(`(.+)\.txt:(.*)`)
-	for err == nil {
-		bytes, err = output.ReadBytes('\n')
-		matches := re.FindStringSubmatch(string(bytes))
-		if len(matches) == 3 {
-			results = append(results, Result{Title: matches[1], Content: matches[2]})
-		}
-	}
-	return results
 }
 
 func processLinks(content []byte, link *regexp.Regexp) []byte {
@@ -309,8 +190,8 @@ func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title string) {
 	body := r.FormValue("body")
 	description := r.FormValue("description")
-	user := users[r.Username]
-	author := Author{Name: user.Name, Email: user.Email}
+	user := conf.Auth[r.Username]
+	author := author{Name: user.Name, Email: user.Email}
 	p := &Page{Title: title, Body: body, Description: description, Author: author}
 	err := p.save()
 	if err != nil {
@@ -321,51 +202,35 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 }
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
-	stdOut, logErr := gitLog(fileName(title))
-	if logErr != nil {
-		log.Println(logErr)
-	}
-	var bytes []byte
-	var err error
-	revisions := make([]Revision, 0)
-	for err == nil {
-		bytes, err = stdOut.ReadBytes('\n')
-		revision := parseLog(bytes)
-		if revision == nil {
-			continue
-		}
-		revision.Title = title
-		revisions = append(revisions, *revision)
-	}
+	revisions, _ := gitLog(fileName(title))
 	p := &Page{Title: title, Body: "", Site: conf, Revisions: revisions}
 	renderTemplate(w, "history", p)
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
 	search := r.FormValue("search")
-	grep, err := gitGrep(search)
+	results, err := gitGrep(search)
 	if err != nil {
 		log.Println("error in search", err)
 	}
-
-	results := parseGrepOutput(grep)
 	sp := &SearchPage{Title: "Search", Results: results, Site: conf}
 	renderSearchTemplate(w, "search", sp)
 }
 
 // Initialize the configuration options, templates and URL and link regexes.
 func init() {
-	//flag.StringVar(&conf.AuthFile, "auth", "./auth.json", "File containing user authentication")
 	flag.StringVar(&configFile, "config", "./goiki.toml", "Location of configuration file")
 	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
 
 	flag.Parse()
 
-	//users, _ = loadAuth(conf.AuthFile)
-	conf, err := loadConfig(configFile)
+	var err error
+	conf, err = loadConfig(configFile)
 	if err != nil {
 		panic(err)
 	}
+
+	conf.loadAuth()
 
 	authenticator = auth.NewBasicAuthenticator(serviceAddress(conf.Host, conf.Port), secret)
 	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html", "templates/search.html"))
@@ -374,25 +239,19 @@ func init() {
 }
 
 func secret(username, realm string) string {
-	return users[username].Password
+	return conf.Auth[username].Password
 }
 
 func serviceAddress(host string, port int) string {
 	return fmt.Sprintf("%s:%d", host, port)
 }
 
-// Main. Parse the configuration flags and start the web server based on those
-// configuration flags.
 func main() {
-	flag.Parse()
-
-	// Display version and exit
+	// Display version and exit (flag -version)
 	if displayVersion {
 		fmt.Println("Goiki", GOIKIVERSION)
 		return
 	}
-
-	log.Println(conf)
 
 	// Load repo
 	var err error
