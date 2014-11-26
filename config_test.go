@@ -67,7 +67,6 @@ func TestConfigStaticDir(t *testing.T) {
 
 func TestConfigUsers(t *testing.T) {
 	c, _ := loadConfigFromFile(testConfigFile)
-	fmt.Println(c)
 	u := user{Name: "Goiki", Email: "goiki@example.com", Username: "goiki", Password: "{SHA}4v0+mLtvlX3qyy5ISrQU5mw0Yhg="}
 
 	if len(c.Users) != 1 {
