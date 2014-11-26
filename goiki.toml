@@ -17,6 +17,9 @@ data_dir = "./data"
 # Path to custom templates; leave empty to use the packaged templates
 template_dir = ""
 
+# Path to static content; leave empty to use the packaged content
+static_dir = ""
+
 # Wiki users.
 #
 # Each user entry must provide a `name`, `email`, `username` and `password`.
