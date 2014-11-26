@@ -18,6 +18,7 @@ type config struct {
 	Port        int
 	DataDir     string `toml:"data_dir"`
 	TemplateDir string `toml:"template_dir"`
+	StaticDir   string `toml:"static_dir"`
 	Users       []user
 	Auth        map[string]user
 }
@@ -30,15 +31,18 @@ func (c *config) loadAuth() {
 	c.Auth = auth
 }
 
-func loadConfig(filename string) (config, error) {
+func loadConfigFromFile(file string) (config, error) {
 	var c config
-	var data []byte
-	var err error
-
-	if data, err = ioutil.ReadFile(filename); err != nil {
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
 		return c, err
 	}
-	if _, err = toml.Decode(string(data), &c); err != nil {
+	return loadConfig(string(data))
+}
+
+func loadConfig(data string) (config, error) {
+	var c config
+	if _, err := toml.Decode(data, &c); err != nil {
 		return c, err
 	}
 	return c, nil
