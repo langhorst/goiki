@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/VictorLowther/go-git/git"
 	"regexp"
+	"strings"
 )
 
 var (
@@ -20,16 +21,21 @@ func (a *author) String() string {
 	return fmt.Sprintf("%s <%s>", a.Name, a.Email)
 }
 
-type gitRevision struct {
+type pageRevision struct {
+	Title       string
 	Object      string
 	Description string
 	Author      author
 	Timestamp   string
 }
 
-type gitResult struct {
+type searchResult struct {
 	Title   string
 	Content string
+}
+
+func title(file string) string {
+	return strings.Replace(file, ".txt", "", -1)
 }
 
 func gitExec(command string, args ...string) (*bytes.Buffer, error) {
@@ -58,9 +64,8 @@ func gitCommit(message string, author author) (*bytes.Buffer, error) {
 	return gitExec("commit", "-m", message, "--author", author.String())
 }
 
-func gitLog(file string) ([]gitRevision, error) {
-	//revisions := make([]gitRevision, 0)
-	var revisions []gitRevision
+func gitLog(file string) ([]pageRevision, error) {
+	var revisions []pageRevision
 	out, err := gitExec("log", "--pretty=format:%h %an <%ae> %ad %s", "--date=relative", file)
 	if err != nil {
 		return revisions, err
@@ -72,22 +77,23 @@ func gitLog(file string) ([]gitRevision, error) {
 		if revision.Object == "" {
 			continue
 		}
+		revision.Title = title(file)
 		revisions = append(revisions, revision)
 	}
 	return revisions, nil
 }
 
-func parseGitLog(log string) gitRevision {
+func parseGitLog(log string) pageRevision {
 	re := regexp.MustCompile(`(.{0,7}) (.+) (<.+>) (\d+ \w+ ago) (.*)`)
 	matches := re.FindStringSubmatch(log)
 	if len(matches) == 6 {
-		return gitRevision{Object: matches[1], Author: author{Name: matches[2], Email: matches[3]}, Timestamp: matches[4], Description: matches[5]}
+		return pageRevision{Object: matches[1], Author: author{Name: matches[2], Email: matches[3]}, Timestamp: matches[4], Description: matches[5]}
 	}
-	return gitRevision{}
+	return pageRevision{}
 }
 
-func gitGrep(keyword string) ([]gitResult, error) {
-	var results []gitResult
+func gitGrep(keyword string) ([]searchResult, error) {
+	var results []searchResult
 	out, err := gitExec("grep", "--ignore-case", keyword)
 	if err != nil {
 		return results, err
@@ -96,17 +102,17 @@ func gitGrep(keyword string) ([]gitResult, error) {
 	return results, nil
 }
 
-func parseGitGrep(output *bytes.Buffer) []gitResult {
+func parseGitGrep(output *bytes.Buffer) []searchResult {
 	var err error
 	var bytes []byte
-	results := make([]gitResult, 0)
+	results := make([]searchResult, 0)
 
 	re := regexp.MustCompile(`(.+)\.txt:(.*)`)
 	for err == nil {
 		bytes, err = output.ReadBytes('\n')
 		matches := re.FindStringSubmatch(string(bytes))
 		if len(matches) == 3 {
-			results = append(results, gitResult{Title: matches[1], Content: matches[2]})
+			results = append(results, searchResult{Title: matches[1], Content: matches[2]})
 		}
 	}
 	return results
