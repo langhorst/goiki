@@ -2,6 +2,7 @@ package main
 
 import (
 	// stdlib
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"text/template"
 
 	// external
@@ -25,7 +27,9 @@ const (
 
 var (
 	configFile     string
+	displayConfig  bool
 	displayVersion bool
+	templateFiles  map[string]string
 	conf           config
 	templates      *template.Template
 	validPath      *regexp.Regexp
@@ -33,22 +37,28 @@ var (
 	authenticator  *auth.BasicAuth
 )
 
-type Page struct {
-	Author      author
+type page struct {
+	SiteName    string
 	Title       string
+	Author      author
 	Body        string
 	Description string
-	Site        config
-	Revisions   []gitRevision
+	Revisions   []pageRevision
 }
 
-type SearchPage struct {
-	Title   string
-	Results []gitResult
-	Site    config
+type searchPage struct {
+	SiteName string
+	Title    string
+	Results  []searchResult
 }
 
-func (p *Page) save() error {
+type historyPage struct {
+	SiteName  string
+	Title     string
+	Revisions []pageRevision
+}
+
+func (p *page) save() error {
 	filename := fileName(p.Title)
 	datapath := dataPath(conf.DataDir, filename)
 
@@ -87,20 +97,20 @@ func dataPath(dir string, file string) string {
 	return filepath.Join(dir, file)
 }
 
-func loadPage(title string, revision string) (*Page, error) {
+func loadPage(title string, revision string) (*page, error) {
 	filename := fileName(title)
 	if len(revision) == 0 {
 		revision = "HEAD"
 	}
 	body, err := gitShow(filename, revision)
 	if err != nil {
-		return &Page{
-			Title: title,
-			Body:  body.String(),
-			Site:  conf,
+		return &page{
+			Title:    title,
+			Body:     body.String(),
+			SiteName: conf.Name,
 		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
-	return &Page{Title: title, Body: body.String(), Site: conf}, nil
+	return &page{Title: title, Body: body.String(), SiteName: conf.Name}, nil
 }
 
 func processLinks(content []byte, link *regexp.Regexp) []byte {
@@ -109,14 +119,25 @@ func processLinks(content []byte, link *regexp.Regexp) []byte {
 	})
 }
 
-func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
+/*
+TODO: How to combine the three functions? With use of an interface for the page?
+*/
+
+func renderTemplate(w http.ResponseWriter, tmpl string, p *page) {
 	err := templates.ExecuteTemplate(w, tmpl, p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func renderSearchTemplate(w http.ResponseWriter, tmpl string, p *SearchPage) {
+func renderHistoryTemplate(w http.ResponseWriter, tmpl string, p *historyPage) {
+	err := templates.ExecuteTemplate(w, tmpl, p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func renderSearchTemplate(w http.ResponseWriter, tmpl string, p *searchPage) {
 	err := templates.ExecuteTemplate(w, tmpl, p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -181,7 +202,7 @@ func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 
 	p, err := loadPage(title, revision)
 	if err != nil {
-		p = &Page{Title: title, Site: conf}
+		p = &page{Title: title, SiteName: conf.Name}
 	}
 
 	renderTemplate(w, "edit", p)
@@ -192,7 +213,7 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 	description := r.FormValue("description")
 	user := conf.Auth[r.Username]
 	author := author{Name: user.Name, Email: user.Email}
-	p := &Page{Title: title, Body: body, Description: description, Author: author}
+	p := &page{Title: title, Body: body, Description: description, Author: author}
 	err := p.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -203,8 +224,8 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revisions, _ := gitLog(fileName(title))
-	p := &Page{Title: title, Body: "", Site: conf, Revisions: revisions}
-	renderTemplate(w, "history", p)
+	p := &historyPage{Title: title, Revisions: revisions, SiteName: conf.Name}
+	renderHistoryTemplate(w, "history", p)
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -213,27 +234,33 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("error in search", err)
 	}
-	sp := &SearchPage{Title: "Search", Results: results, Site: conf}
-	renderSearchTemplate(w, "search", sp)
+	p := &searchPage{Title: "Search", Results: results, SiteName: conf.Name}
+	renderSearchTemplate(w, "search", p)
+}
+
+func bundleHandler(w http.ResponseWriter, r *http.Request) {
+	p := strings.TrimLeft(r.URL.Path, "/")
+	f, ok := _bundle[p]
+	if ok {
+		w.Write([]byte(f))
+	} else {
+		http.NotFound(w, r)
+	}
+}
+
+func defaultConfig() string {
+	data, _ := base64.StdEncoding.DecodeString(_bundle["goiki.toml"])
+	return string(data)
 }
 
 // Initialize the configuration options, templates and URL and link regexes.
 func init() {
-	flag.StringVar(&configFile, "config", "./goiki.toml", "Location of configuration file")
-	flag.BoolVar(&displayVersion, "version", false, "Display version and exit")
+	flag.StringVar(&configFile, "c", "", "Specify a configuration file (use default config otherwise)")
+	flag.BoolVar(&displayConfig, "d", false, "Display default configuration and exit")
+	flag.BoolVar(&displayVersion, "v", false, "Display version and exit")
 
-	flag.Parse()
-
-	var err error
-	conf, err = loadConfig(configFile)
-	if err != nil {
-		panic(err)
-	}
-
-	conf.loadAuth()
-
-	authenticator = auth.NewBasicAuthenticator(serviceAddress(conf.Host, conf.Port), secret)
-	templates = template.Must(template.ParseFiles("templates/_header.html", "templates/_footer.html", "templates/edit.html", "templates/view.html", "templates/history.html", "templates/search.html"))
+	templateFiles = map[string]string{"header": "_header.html", "footer": "_footer.html", "edit": "edit.html",
+		"history": "history.html", "search": "search.html", "view": "view.html"}
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
@@ -247,30 +274,83 @@ func serviceAddress(host string, port int) string {
 }
 
 func main() {
+	flag.Parse()
+
 	// Display version and exit (flag -version)
 	if displayVersion {
 		fmt.Println("Goiki", GOIKIVERSION)
 		return
 	}
 
-	// Load repo
+	// Display the default configuration set and exit (flag -default)
+	if displayConfig {
+		fmt.Println(defaultConfig())
+		return
+	}
+
+	// Load the configuration. Use the default embedded configuration unless
+	// a config file was specified at the command line.
 	var err error
+	if len(configFile) == 0 {
+		conf, err = loadConfig(defaultConfig())
+	} else {
+		conf, err = loadConfigFromFile(configFile)
+	}
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// Load authentication from the config and run the authenticator.
+	conf.loadAuth()
+	authenticator = auth.NewBasicAuthenticator(serviceAddress(conf.Host, conf.Port), secret)
+
+	// Load the templates. Use the default embedded templates unless a directory
+	// of templates is specified in configuration.
+	if len(conf.TemplateDir) == 0 {
+		templates = template.Must(template.New("goiki").Parse(""))
+		for _, file := range templateFiles {
+			data, _ := ioutil.ReadFile(filepath.Join("templates", file))
+			template.Must(templates.Parse(string(data)))
+		}
+	} else {
+		templateLocations := make([]string, len(templateFiles))
+		i := 0
+		for _, file := range templateFiles {
+			templateLocations[i] = filepath.Join(conf.TemplateDir, file)
+			i += 1
+		}
+		templates = template.Must(template.ParseFiles(templateLocations...))
+	}
+
+	// Load the repository.
 	if repo, err = git.Open(conf.DataDir); err != nil {
 		log.Fatalf("Unable to open the repo at %s. Please check to make sure it exists and is initialized.\n%v", conf.DataDir, err)
 	}
 
-	// Define routes
-	//http.HandleFunc("/", authenticator.Wrap(authHandler))
-	http.Handle("/static/", http.FileServer(http.Dir("./")))
+	// Static routes
+	// If a static directory is provided in the configuration, use that; otherwise
+	// use the embedded static content
+	if len(conf.StaticDir) > 0 {
+		http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(conf.StaticDir))))
+	} else {
+		http.Handle("/static/", http.HandlerFunc(bundleHandler))
+	}
+
+	// Unathenticated routes
 	http.HandleFunc("/search/", searchHandler)
 	http.HandleFunc("/", makeHandler(viewHandler))
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/history/", makeHandler(historyHandler))
 
+	// Authenticated routes
 	http.HandleFunc("/edit/", authenticator.Wrap(makeAuthHandler(editHandler)))
 	http.HandleFunc("/save/", authenticator.Wrap(makeAuthHandler(saveHandler)))
 
-	l, err := net.Listen("tcp", serviceAddress(conf.Host, conf.Port))
+	address := serviceAddress(conf.Host, conf.Port)
+
+	log.Printf("Listening on %v\n", address)
+
+	l, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatal(err)
 	}
