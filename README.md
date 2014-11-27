@@ -38,9 +38,16 @@ Where `goiki.conf` is the location of the configuration file.
 Building
 --------
 
-    ./bundle.sh
-    $GOPATH/bin/esc -o static.go static/
     go build
+
+If the default configuration or templates are altered, you will need to run the bundler to update that content for the build:
+
+    ./bundle.sh
+
+And if any of the static content changes, you will need the [esc file embedder](https://github.com/mjibson/esc):
+
+    go get github.com/mjibson/esc
+    $GOPATH/bin/esc -o static.go static/
 
 
 TODOs
