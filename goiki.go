@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	GOIKIVERSION = "0.0.1"
+	GOIKIVERSION = "0.1.0"
 )
 
 var (
