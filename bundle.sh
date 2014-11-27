@@ -22,9 +22,6 @@ function bundleFile {
 echo "var _bundle = map[string]string{" >> $dest
 
 bundleDir templates
-bundleDir static/css
-bundleDir static/js
-bundleDir static/fonts
 bundleFile goiki.toml
 
 echo -e "}\n" >> $dest
