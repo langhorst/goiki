@@ -249,8 +249,17 @@ func bundleHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func defaultConfig() string {
-	data, _ := base64.StdEncoding.DecodeString(_bundle["goiki.toml"])
-	return string(data)
+	return _bundle["goiki.toml"]
+}
+
+func loadBundle() {
+	for file, content := range _bundle {
+		c, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			log.Printf("Error during loadBundle(): %v", err)
+		}
+		_bundle[file] = string(c)
+	}
 }
 
 // Initialize the configuration options, templates and URL and link regexes.
@@ -258,6 +267,8 @@ func init() {
 	flag.StringVar(&configFile, "c", "", "Specify a configuration file (use default config otherwise)")
 	flag.BoolVar(&displayConfig, "d", false, "Display default configuration and exit")
 	flag.BoolVar(&displayVersion, "v", false, "Display version and exit")
+
+	loadBundle()
 
 	templateFiles = map[string]string{"header": "_header.html", "footer": "_footer.html", "edit": "edit.html",
 		"history": "history.html", "search": "search.html", "view": "view.html"}
@@ -333,7 +344,7 @@ func main() {
 	if len(conf.StaticDir) > 0 {
 		http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(conf.StaticDir))))
 	} else {
-		http.Handle("/static/", http.HandlerFunc(bundleHandler))
+		http.Handle("/static/", http.FileServer(FS(false)))
 	}
 
 	// Unathenticated routes
