@@ -28,11 +28,11 @@ Read the default configuration for pointers on configurable options.
 Running
 -------
 
-Normal use Goiki:
+Normally:
 
     goiki -c goiki.conf
 
-Where `goiki.conf` is the location of the configuration file.
+Where `goiki.conf` is the location of the configuration file. Everything configurable is specified in the configuration file.
 
 
 Building
