@@ -307,8 +307,10 @@ func main() {
 	} else {
 		conf, err = loadConfigFromFile(configFile)
 	}
+
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Printf("FATAL: Unable to load configuration: %v\n", err)
+		return
 	}
 
 	// Load authentication from the config and run the authenticator.
