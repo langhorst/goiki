@@ -9,7 +9,7 @@ import (
 )
 
 func initRepo() string {
-	dir, _ := ioutil.TempDir("", "")
+	dir, _ := ioutil.TempDir("./", "git-test")
 	cmd := exec.Command("git", "init", dir)
 	err := cmd.Run()
 	if err != nil {
