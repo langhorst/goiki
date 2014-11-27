@@ -1,7 +1,7 @@
 GOIKI
 =====
 
-Goiki is a Git+Markdown powered wiki. It incorpoates Markdown syntax for writing ease and Git as a backend for revision history. Everything is embedded within the executable for ease of installation, but configuration, templates and static content can be provided for flexibility.
+Goiki is a Git+Markdown powered wiki. It incorpoates Markdown syntax for ease of writing and Git as a backend for content storage and revision history. Everything is embedded within the executable for ease of installation. Flexibility is provided with the use of custom templates and static content.
 
 What's the point? I wanted a wiki easily run on a Raspberry Pi with no external dependencies (well, other than Git).
 
