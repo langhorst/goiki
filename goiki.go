@@ -90,7 +90,7 @@ func (p *page) save() error {
 }
 
 func fileName(title string) string {
-	return title + ".txt"
+	return title + ".md"
 }
 
 func dataPath(dir string, file string) string {
@@ -149,7 +149,7 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 		path := r.URL.Path
 		log.Println(path)
 		if path == "/" {
-			http.Redirect(w, r, "/view/FrontPage", http.StatusFound)
+			http.Redirect(w, r, "/view/Home", http.StatusFound)
 			return
 		}
 		m := validPath.FindStringSubmatch(path)
