@@ -35,7 +35,7 @@ type searchResult struct {
 }
 
 func title(file string) string {
-	return strings.Replace(file, ".txt", "", -1)
+	return strings.Replace(file, ".md", "", -1)
 }
 
 func gitExec(command string, args ...string) (*bytes.Buffer, error) {
@@ -107,7 +107,7 @@ func parseGitGrep(output *bytes.Buffer) []searchResult {
 	var bytes []byte
 	results := make([]searchResult, 0)
 
-	re := regexp.MustCompile(`(.+)\.txt:(.*)`)
+	re := regexp.MustCompile(`(.+)\.md:(.*)`)
 	for err == nil {
 		bytes, err = output.ReadBytes('\n')
 		matches := re.FindStringSubmatch(string(bytes))
