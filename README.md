@@ -57,3 +57,16 @@ TODOs
 * Better search
 * More tests
 * Cleaner code
+
+
+Contribute
+----------
+
+* Issue Tracker: github.com/langhorst/goiki/issues
+* Source Code: github.com/langhorst/goiki
+
+
+License
+-------
+
+This project is licensed under the MIT license.
