@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	GOIKIVERSION = "0.1.0"
+	GOIKIVERSION = "0.2.0"
 )
 
 var (
@@ -90,7 +90,7 @@ func (p *page) save() error {
 }
 
 func fileName(title string) string {
-	return title + ".md"
+	return title + "." + conf.FileExtension
 }
 
 func dataPath(dir string, file string) string {
@@ -149,7 +149,11 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 		path := r.URL.Path
 		log.Println(path)
 		if path == "/" {
-			http.Redirect(w, r, "/view/Home", http.StatusFound)
+			path = "/view/"
+		}
+		if path[len(path)-1:len(path)] == "/" {
+			viewIndex := path + conf.IndexPage
+			http.Redirect(w, r, viewIndex, http.StatusFound)
 			return
 		}
 		m := validPath.FindStringSubmatch(path)
@@ -272,7 +276,7 @@ func init() {
 
 	templateFiles = map[string]string{"header": "_header.html", "footer": "_footer.html", "edit": "edit.html",
 		"history": "history.html", "search": "search.html", "view": "view.html"}
-	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/]+)$")
+	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/_-]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
 }
 

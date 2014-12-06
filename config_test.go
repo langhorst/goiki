@@ -48,6 +48,22 @@ func TestConfigDataDir(t *testing.T) {
 	}
 }
 
+func TestConfigIndexPage(t *testing.T) {
+	c, _ := loadConfigFromFile(testConfigFile)
+	indexPage := "home"
+	if c.IndexPage != indexPage {
+		t.Errorf("IndexPage should equal >%s<, but is >%s<", indexPage, c.IndexPage)
+	}
+}
+
+func TestConfigFileExtension(t *testing.T) {
+	c, _ := loadConfigFromFile(testConfigFile)
+	fileExtension := "md"
+	if c.FileExtension != fileExtension {
+		t.Errorf("FileExtension should equal >%s<, but is >%s<", fileExtension, c.FileExtension)
+	}
+}
+
 func TestConfigTemplateDir(t *testing.T) {
 	c, _ := loadConfigFromFile(testConfigFile)
 	templateDir := ""

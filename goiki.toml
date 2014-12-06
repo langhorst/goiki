@@ -14,6 +14,12 @@ port = 4567
 # Path to data files (the Git repo)
 data_dir = "./data"
 
+# Name of page to use for the index of a category (or directory)
+index_page = "home"
+
+# File extension to use within the filesystem
+file_extension = "md"
+
 # Path to custom templates; leave empty to use the packaged templates
 template_dir = ""
 

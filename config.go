@@ -13,14 +13,16 @@ type user struct {
 }
 
 type config struct {
-	Name        string
-	Host        string
-	Port        int
-	DataDir     string `toml:"data_dir"`
-	TemplateDir string `toml:"template_dir"`
-	StaticDir   string `toml:"static_dir"`
-	Users       []user
-	Auth        map[string]user
+	Name          string
+	Host          string
+	Port          int
+	DataDir       string `toml:"data_dir"`
+	IndexPage     string `toml:"index_page"`
+	FileExtension string `toml:"file_extension"`
+	TemplateDir   string `toml:"template_dir"`
+	StaticDir     string `toml:"static_dir"`
+	Users         []user
+	Auth          map[string]user
 }
 
 func (c *config) loadAuth() {
