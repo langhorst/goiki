@@ -41,6 +41,7 @@ var (
 type page struct {
 	SiteName    string
 	Title       string
+	Theme       string
 	Author      author
 	Body        string
 	Description string
@@ -50,12 +51,14 @@ type page struct {
 type searchPage struct {
 	SiteName string
 	Title    string
+	Theme    string
 	Results  []searchResult
 }
 
 type historyPage struct {
 	SiteName  string
 	Title     string
+	Theme     string
 	Revisions []pageRevision
 }
 
@@ -107,11 +110,12 @@ func loadPage(title string, revision string) (*page, error) {
 	if err != nil {
 		return &page{
 			Title:    title,
+			Theme:    conf.Theme,
 			Body:     body.String(),
 			SiteName: conf.Name,
 		}, fmt.Errorf("Unable to load page content from %s at %s\n", filename, revision)
 	}
-	return &page{Title: title, Body: body.String(), SiteName: conf.Name}, nil
+	return &page{Title: title, Theme: conf.Theme, Body: body.String(), SiteName: conf.Name}, nil
 }
 
 func processLinks(content []byte, link *regexp.Regexp) []byte {
@@ -214,7 +218,7 @@ func editHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 
 	p, err := loadPage(title, revision)
 	if err != nil {
-		p = &page{Title: title, SiteName: conf.Name}
+		p = &page{Title: title, Theme: conf.Theme, SiteName: conf.Name}
 	}
 
 	renderTemplate(w, "edit", p)
@@ -225,7 +229,7 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 	description := r.FormValue("description")
 	user := conf.Auth[r.Username]
 	author := author{Name: user.Name, Email: user.Email}
-	p := &page{Title: title, Body: body, Description: description, Author: author}
+	p := &page{Title: title, Theme: conf.Theme, Body: body, Description: description, Author: author}
 	err := p.save()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -236,7 +240,7 @@ func saveHandler(w http.ResponseWriter, r *auth.AuthenticatedRequest, title stri
 
 func historyHandler(w http.ResponseWriter, r *http.Request, title string) {
 	revisions, _ := gitLog(fileName(title))
-	p := &historyPage{Title: title, Revisions: revisions, SiteName: conf.Name}
+	p := &historyPage{Title: title, Theme: conf.Theme, Revisions: revisions, SiteName: conf.Name}
 	renderHistoryTemplate(w, "history", p)
 }
 
@@ -246,7 +250,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("error in search", err)
 	}
-	p := &searchPage{Title: "Search", Results: results, SiteName: conf.Name}
+	p := &searchPage{Title: "Search", Theme: conf.Theme, Results: results, SiteName: conf.Name}
 	renderSearchTemplate(w, "search", p)
 }
 
