@@ -64,6 +64,14 @@ func TestConfigFileExtension(t *testing.T) {
 	}
 }
 
+func TestConfigTheme(t *testing.T) {
+	c, _ := loadConfigFromFile(testConfigFile)
+	theme := "default"
+	if c.Theme != theme {
+		t.Errorf("Theme should equal >%s<, but is >%s<", theme, c.Theme)
+	}
+}
+
 func TestConfigTemplateDir(t *testing.T) {
 	c, _ := loadConfigFromFile(testConfigFile)
 	templateDir := ""

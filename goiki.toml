@@ -20,6 +20,12 @@ index_page = "home"
 # File extension to use within the filesystem
 file_extension = "md"
 
+# Theme to use with default templates; see http://bootswatch.com for details.
+# Valid values are: "default", "cerulean", "cosmo", "cyborg", "darkly", "flatly",
+# "journal", "lumen", "paper", "readable", "sandstone", "simplex", "slate",
+# "spacelab", "superhero", "united" and "yeti"
+theme = "default" 
+
 # Path to custom templates; leave empty to use the packaged templates
 template_dir = ""
 

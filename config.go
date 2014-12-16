@@ -19,6 +19,7 @@ type config struct {
 	DataDir       string `toml:"data_dir"`
 	IndexPage     string `toml:"index_page"`
 	FileExtension string `toml:"file_extension"`
+	Theme         string
 	TemplateDir   string `toml:"template_dir"`
 	StaticDir     string `toml:"static_dir"`
 	TableClass    string `toml:"table_class"`
