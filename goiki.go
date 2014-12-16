@@ -34,6 +34,7 @@ var (
 	templates      *template.Template
 	validPath      *regexp.Regexp
 	validLink      *regexp.Regexp
+	tableTag       *regexp.Regexp
 	authenticator  *auth.BasicAuth
 )
 
@@ -119,6 +120,12 @@ func processLinks(content []byte, link *regexp.Regexp) []byte {
 	})
 }
 
+func processTables(content []byte, table *regexp.Regexp) []byte {
+	return table.ReplaceAllFunc(content, func(match []byte) []byte {
+		return table.ReplaceAll(match, []byte(`<table class="`+conf.TableClass+`">`))
+	})
+}
+
 /*
 TODO: How to combine the three functions? With use of an interface for the page?
 */
@@ -193,6 +200,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	content := []byte(p.Body)
 	content = processLinks(content, validLink)
 	content = blackfriday.MarkdownCommon(content)
+	content = processTables(content, tableTag)
 	p.Body = string(content)
 
 	renderTemplate(w, "view", p)
@@ -278,6 +286,7 @@ func init() {
 		"history": "history.html", "search": "search.html", "view": "view.html"}
 	validPath = regexp.MustCompile("^/(edit|save|view|history)/([a-zA-Z0-9/_-]+)$")
 	validLink = regexp.MustCompile(`\[([^\]]+)]\(\)`)
+	tableTag = regexp.MustCompile(`<table>`)
 }
 
 func secret(username, realm string) string {

@@ -26,6 +26,9 @@ template_dir = ""
 # Path to static content; leave empty to use the packaged content
 static_dir = ""
 
+# CSS class(es) to use for tables
+table_class = "table table-striped table-hover"
+
 # Wiki users.
 #
 # Each user entry must provide a `name`, `email`, `username` and `password`.

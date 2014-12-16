@@ -21,6 +21,7 @@ type config struct {
 	FileExtension string `toml:"file_extension"`
 	TemplateDir   string `toml:"template_dir"`
 	StaticDir     string `toml:"static_dir"`
+	TableClass    string `toml:"table_class"`
 	Users         []user
 	Auth          map[string]user
 }

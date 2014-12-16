@@ -80,6 +80,14 @@ func TestConfigStaticDir(t *testing.T) {
 	}
 }
 
+func TestConfigTableClass(t *testing.T) {
+	c, _ := loadConfigFromFile(testConfigFile)
+	tableClass := "table table-striped table-hover"
+	if c.TableClass != tableClass {
+		t.Errorf("TableClass should equal >%s<, but is >%s<", tableClass, c.TableClass)
+	}
+}
+
 func TestConfigUsers(t *testing.T) {
 	c, _ := loadConfigFromFile(testConfigFile)
 	u := user{Name: "Goiki", Email: "goiki@example.com", Username: "goiki", Password: "{SHA}4v0+mLtvlX3qyy5ISrQU5mw0Yhg="}
