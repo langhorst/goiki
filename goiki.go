@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	GOIKIVERSION = "0.2.0"
+	GOIKIVERSION = "0.2.1"
 )
 
 var (
@@ -337,9 +337,9 @@ func main() {
 	// Load the templates. Use the default embedded templates unless a directory
 	// of templates is specified in configuration.
 	if len(conf.TemplateDir) == 0 {
-		templates = template.Must(template.New("goiki").Parse(""))
+		templates = template.Must(template.New("bundle").Parse(""))
 		for _, file := range templateFiles {
-			data, _ := ioutil.ReadFile(filepath.Join("templates", file))
+			data := _bundle[filepath.Join("templates", file)]
 			template.Must(templates.Parse(string(data)))
 		}
 	} else {
@@ -354,7 +354,7 @@ func main() {
 
 	// Load the repository.
 	if repo, err = git.Open(conf.DataDir); err != nil {
-		log.Fatalf("Unable to open the repo at %s. Please check to make sure it exists and is initialized.\n%v", conf.DataDir, err)
+		log.Fatalf("Unable to open the repo at %v. Please check to make sure it exists and is initialized.\n%v\n", conf.DataDir, err)
 	}
 
 	// Static routes
@@ -382,7 +382,7 @@ func main() {
 
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Unable to start server at %v. Please check the host and port configuration and try again.\n%v\n", address, err)
 	}
 
 	s := &http.Server{}
